@@ -1,0 +1,43 @@
+{
+  "name": "footics-mcp",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Remote MCP server for Footics — connect an AI assistant to your World Cup prediction account.",
+  "license": "MIT",
+  "author": "Tom Cardoen",
+  "homepage": "https://mcp.footics.app",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Footics/mcp-server.git"
+  },
+  "packageManager": "pnpm@10.2.1",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "typecheck": "tsc --noEmit",
+    "token": "dotenv -e .env.local -- tsx scripts/mint-test-token.ts",
+    "oauth-e2e": "dotenv -e .env.local -- node scripts/oauth-e2e.mjs"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.26.0",
+    "@supabase/supabase-js": "^2.106.2",
+    "drizzle-orm": "^0.45.2",
+    "jose": "^5.9.6",
+    "mcp-handler": "^1.1.0",
+    "next": "16.2.6",
+    "postgres": "^3.4.9",
+    "react": "19.2.4",
+    "react-dom": "19.2.4",
+    "server-only": "^0.0.1",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "dotenv-cli": "^11.0.0",
+    "tsx": "^4.22.3",
+    "typescript": "^5"
+  }
+}

@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
+  <!-- Symbole Footics : le « F » de la wordmark (Bricolage Grotesque ExtraBold,
+       tracé vectorisé) + le point-ballon vert, repris du point sur le « i ». -->
+  <rect width="32" height="32" rx="7" fill="#0e1316" />
+  <path fill="#faf6ec" d="M7.3 24.6L7.3 7.6L11.45 7.6L11.45 24.6ZM9.33 18.55L9.33 15.17L19.3 15.17L19.3 18.55ZM9.33 11.13L9.33 7.6L20.23 7.6L20.23 11.13Z" />
+  <circle cx="24.2" cy="8.9" r="3.5" fill="#15c26b" />
+</svg>
