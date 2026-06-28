@@ -7,12 +7,12 @@ import { jokerBucketFor, jokerBucketLabelFor, jokerQuotaFor } from "@/lib/jokers
 import type { Phase } from "@/lib/types";
 
 export type SubmitResult =
-  | { ok: true; saved: { matchId: string; home: number; away: number; joker: boolean }; locked: false }
+  | { ok: true; saved: { matchId: string; home: number; away: number; joker: boolean; winnerTeamCode: string | null; koDrawNeedsQualifier: boolean }; locked: false }
   | { ok: false; error: string };
 
 export async function submitPredictionFor(
   userId: string,
-  input: { matchId: string; homeScore: number; awayScore: number; joker: boolean },
+  input: { matchId: string; homeScore: number; awayScore: number; joker: boolean; winnerTeamCode?: string | null },
 ): Promise<SubmitResult> {
   const h = Math.trunc(input.homeScore);
   const a = Math.trunc(input.awayScore);
@@ -44,13 +44,43 @@ export async function submitPredictionFor(
     }
   }
 
+  // Qualifié (nouvelle règle KO) : n'a de sens que sur un NUL prédit en match à
+  // élimination. On NORMALISE pour ne jamais violer le CHECK predictions_winner_implies_draw :
+  //  - hors nul KO → winner_team_code = null. C'ÉTAIT LE BUG : passer un nul KO déjà
+  //    qualifié (winner posé via le web) à un score décisif laissait le qualifié périmé →
+  //    winner ≠ null + home ≠ away → violation du CHECK. On l'efface désormais.
+  //  - nul KO → on pose le qualifié fourni (validé ∈ {dom, ext}), sinon on PRÉSERVE celui
+  //    déjà choisi (ex. via le web), pour ne pas le perdre en éditant juste le score.
+  const isKoDraw = m.match.scoringRule === "knockout" && h === a;
+  const validWinner =
+    isKoDraw && input.winnerTeamCode && (input.winnerTeamCode === m.match.homeTeamCode || input.winnerTeamCode === m.match.awayTeamCode)
+      ? input.winnerTeamCode
+      : null;
+  let winnerTeamCode: string | null = null;
+  if (isKoDraw) {
+    if (input.winnerTeamCode !== undefined) {
+      winnerTeamCode = validWinner;
+    } else {
+      const [existing] = await db
+        .select({ w: predictions.winnerTeamCode })
+        .from(predictions)
+        .where(and(eq(predictions.userId, userId), eq(predictions.matchId, m.match.id)))
+        .limit(1);
+      winnerTeamCode = existing?.w ?? null;
+    }
+  }
+
   await db
     .insert(predictions)
-    .values({ userId, matchId: m.match.id, homeScore: h, awayScore: a, jokerApplied: input.joker })
+    .values({ userId, matchId: m.match.id, homeScore: h, awayScore: a, jokerApplied: input.joker, winnerTeamCode })
     .onConflictDoUpdate({
       target: [predictions.userId, predictions.matchId],
-      set: { homeScore: h, awayScore: a, jokerApplied: input.joker, updatedAt: new Date() },
+      set: { homeScore: h, awayScore: a, jokerApplied: input.joker, winnerTeamCode, updatedAt: new Date() },
     });
 
-  return { ok: true, saved: { matchId: m.match.id, home: h, away: a, joker: input.joker }, locked: false };
+  return {
+    ok: true,
+    saved: { matchId: m.match.id, home: h, away: a, joker: input.joker, winnerTeamCode, koDrawNeedsQualifier: isKoDraw && winnerTeamCode == null },
+    locked: false,
+  };
 }
