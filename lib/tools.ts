@@ -199,12 +199,18 @@ export function registerTools(server: McpServer): void {
     {
       title: "Poser un prono",
       description:
-        "Pose ou modifie MON pronostic sur un match (scores 0-20, joker optionnel). Refusé si le coup d'envoi est passé ou si je n'ai plus de joker pour ce bucket. Confirme toujours avec l'utilisateur avant d'écrire.",
+        "Pose ou modifie MON pronostic sur un match (scores 0-20, joker optionnel). Refusé si le coup d'envoi est passé ou si je n'ai plus de joker pour ce bucket. Sur un match à élimination directe : le prono porte sur le score à la fin du temps réglementaire (90'), et si tu prédis un NUL, précise winnerTeamCode (l'équipe qui se qualifie) pour le +1 bonus. Confirme toujours avec l'utilisateur avant d'écrire.",
       inputSchema: {
         matchId: z.string().min(1).describe("L'id (uuid) du match — voir list_matches/search."),
         homeScore: z.number().int().min(0).max(20).describe("Score prédit de l'équipe à domicile (0-20)."),
         awayScore: z.number().int().min(0).max(20).describe("Score prédit de l'équipe à l'extérieur (0-20)."),
         joker: z.boolean().default(false).describe("Appliquer un joker (double les points). Défaut: false."),
+        winnerTeamCode: z
+          .string()
+          .min(2)
+          .max(3)
+          .optional()
+          .describe("Match à élimination directe + nul prédit UNIQUEMENT : code FIFA-3 de l'équipe qui se qualifie (pour le +1). Doit être l'une des 2 équipes. Ignoré sur un score décisif ou en phase de poules."),
       },
     },
     async (args, extra) => {
@@ -214,9 +220,14 @@ export function registerTools(server: McpServer): void {
       if (!ENABLE_WRITES) {
         return jsonErr("L'écriture de pronos via MCP est désactivée sur ce serveur (MCP_ENABLE_WRITES=false).");
       }
-      const a = args as { matchId: string; homeScore: number; awayScore: number; joker: boolean };
-      const res = await submitPredictionFor(me.userId, { matchId: a.matchId, homeScore: a.homeScore, awayScore: a.awayScore, joker: a.joker });
-      return res.ok ? jsonOk({ ok: true, saved: res.saved }) : jsonErr(res.error);
+      const a = args as { matchId: string; homeScore: number; awayScore: number; joker: boolean; winnerTeamCode?: string };
+      const res = await submitPredictionFor(me.userId, { matchId: a.matchId, homeScore: a.homeScore, awayScore: a.awayScore, joker: a.joker, winnerTeamCode: a.winnerTeamCode });
+      if (!res.ok) return jsonErr(res.error);
+      // Nul prédit en KO sans qualifié → on invite à le préciser (sinon pas de +1).
+      const note = res.saved.koDrawNeedsQualifier
+        ? "Nul prédit sur un match à élimination directe : appelle à nouveau submit_prediction avec winnerTeamCode (l'équipe qui se qualifie) pour activer le +1 bonus."
+        : undefined;
+      return jsonOk(note ? { ok: true, saved: res.saved, note } : { ok: true, saved: res.saved });
     },
   );
 }
