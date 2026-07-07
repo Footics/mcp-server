@@ -1,7 +1,7 @@
 // Package tools registers the Footics MCP tools on a go-sdk server. Each read
 // tool is one authenticated /v1 call (Bearer relayed) projected into the frozen
-// output shape (shapes.go). whoami is served from the JWT alone. submit_prediction
-// is a stub until footics-api ships POST /v1/predictions (M4).
+// output shape (shapes.go). whoami is served from the JWT alone; submit_prediction
+// forwards to footics-api POST /v1/predictions (the single write point).
 //
 // Output envelope (frozen): success = one text block of pretty-printed JSON
 // (2-space indent, HTML-escaping OFF, matching JSON.stringify(data,null,2));
@@ -40,7 +40,7 @@ type toolServer struct {
 	rlPerMin     int
 }
 
-// Register adds the 10 tools (9 reads + the submit_prediction stub) to server.
+// Register adds the 10 tools (9 reads + submit_prediction) to server.
 func Register(server *mcp.Server, d Deps) {
 	s := &toolServer{
 		api:          d.API,
@@ -113,9 +113,8 @@ func Register(server *mcp.Server, d Deps) {
 		InputSchema: schemaSearch(),
 	}, s.search)
 
-	// submit_prediction always appears (prod runs with writes ON), but the real
-	// write path lands with footics-api POST /v1/predictions (M4). Until then it
-	// is a stub — see submitPrediction.
+	// submit_prediction always appears; it forwards to footics-api
+	// POST /v1/predictions and is gated at call time by MCP_ENABLE_WRITES.
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "submit_prediction",
 		Title:       "Poser un prono",
@@ -281,16 +280,39 @@ func (s *toolServer) search(ctx context.Context, _ *mcp.CallToolRequest, a argsS
 
 /* ── write tool (stub until M4) ────────────────────────────────────────────── */
 
-func (s *toolServer) submitPrediction(ctx context.Context, _ *mcp.CallToolRequest, _ argsSubmit) (*mcp.CallToolResult, any, error) {
-	if _, errRes := s.gate(ctx); errRes != nil {
+func (s *toolServer) submitPrediction(ctx context.Context, _ *mcp.CallToolRequest, a argsSubmit) (*mcp.CallToolResult, any, error) {
+	id, errRes := s.gate(ctx)
+	if errRes != nil {
 		return errRes, nil, nil
 	}
 	if !s.enableWrites {
 		return jsonErr("L'écriture de pronos via MCP n'est pas encore disponible sur cette instance (MCP_ENABLE_WRITES=false)."), nil, nil
 	}
-	// Writes enabled, but the write path (footics-api POST /v1/predictions) ships
-	// with M4 and is not wired here yet.
-	return jsonErr("L'écriture de pronos via MCP arrivera avec l'API /v1 POST (M4) — non encore câblée sur cette instance."), nil, nil
+	// footics-api POST /v1/predictions is the single write point + trust boundary:
+	// it re-verifies the token and enforces every rule (score range, 90' lock,
+	// joker quota, KO-qualifier normalisation). We forward and surface its verdict.
+	in := apiclient.SubmitPredictionInput{
+		MatchID: a.MatchID,
+		Home:    a.HomeScore,
+		Away:    a.AwayScore,
+		Joker:   a.Joker,
+	}
+	if a.WinnerTeamCode != "" {
+		w := a.WinnerTeamCode
+		in.WinnerTeamCode = &w
+	}
+	body, status, err := s.api.SubmitPrediction(ctx, id.token, in)
+	if err != nil {
+		return apiErr("submit_prediction", err), nil, nil
+	}
+	if status < 200 || status >= 300 {
+		// Surface the API's own FR message ({ok:false, error}) verbatim to the model.
+		if msg, _ := body["error"].(string); msg != "" {
+			return jsonErr(msg), nil, nil
+		}
+		return jsonErr(fmt.Sprintf("Échec de l'enregistrement du prono (HTTP %d).", status)), nil, nil
+	}
+	return jsonOK(body), nil, nil
 }
 
 /* ── helpers ───────────────────────────────────────────────────────────────── */

@@ -272,7 +272,7 @@ func TestIntegrationReadTools(t *testing.T) {
 		t.Error("search 'fra' found no matches (expected FRA-MAR)")
 	}
 
-	// submit_prediction — stub: writes OFF ⇒ tool error with the FR message.
+	// submit_prediction — writes OFF here ⇒ tool error with the FR message.
 	res, err := sess.CallTool(ctx, &mcp.CallToolParams{Name: "submit_prediction", Arguments: map[string]any{"matchId": matchID, "homeScore": 1, "awayScore": 0}})
 	if err != nil {
 		t.Fatalf("submit_prediction transport error: %v", err)

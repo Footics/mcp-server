@@ -1,13 +1,7 @@
-# deps
-node_modules
-.pnp
-.pnp.*
-
-# next
-.next
-out
-next-env.d.ts
-*.tsbuildinfo
+# binaries
+/mcp
+footics-mcp-linux
+*.exe
 
 # env (never commit secrets)
 .env
@@ -17,6 +11,5 @@ next-env.d.ts
 # misc
 .DS_Store
 *.log
-.vercel
 .idea
 .vscode

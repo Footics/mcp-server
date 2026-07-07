@@ -8,6 +8,7 @@
 package apiclient
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -243,6 +244,46 @@ func (c *Client) Search(ctx context.Context, token, query string) (SearchResults
 	var out SearchResults
 	_, err := c.getJSON(ctx, token, "/v1/search", url.Values{"q": {query}}, &out)
 	return out, err
+}
+
+// SubmitPredictionInput mirrors footics-api POST /v1/predictions body.
+type SubmitPredictionInput struct {
+	MatchID        string  `json:"matchId"`
+	Home           int     `json:"home"`
+	Away           int     `json:"away"`
+	Joker          bool    `json:"joker"`
+	WinnerTeamCode *string `json:"winnerTeamCode,omitempty"`
+}
+
+// SubmitPrediction → POST /v1/predictions with the user's token. footics-api is
+// the single write point + trust boundary (it re-verifies the token, enforces
+// the 90' lock, joker quota and KO-qualifier rules). Returns the decoded body
+// (whatever the API sent: {ok, prediction} on 2xx, {ok:false, error} otherwise)
+// and the HTTP status, so the tool can surface the API's own FR message verbatim.
+func (c *Client) SubmitPrediction(ctx context.Context, token string, in SubmitPredictionInput) (map[string]any, int, error) {
+	body, err := json.Marshal(in)
+	if err != nil {
+		return nil, 0, err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.base+"/v1/predictions", bytes.NewReader(body))
+	if err != nil {
+		return nil, 0, err
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := c.hc.Do(req)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer resp.Body.Close()
+	raw, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	var out map[string]any
+	if len(raw) > 0 {
+		_ = json.Unmarshal(raw, &out) // tolerate an empty/odd body; status carries the truth
+	}
+	return out, resp.StatusCode, nil
 }
 
 // getJSON does an authenticated GET and decodes a 2xx body into dst. It returns
