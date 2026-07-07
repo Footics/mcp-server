@@ -1,0 +1,26 @@
+# Footics MCP — compose du service Dokploy « footics-mcp » (sourceType github,
+# app Dokploy-Footics, serveur tidings-prod). Build depuis le Dockerfile du repo.
+# Rejoint le socle footics-core via le réseau externe footics-net (api/gotrue par
+# alias). Racine / = 404 by design ; sonde = /.well-known/oauth-protected-resource.
+# Runbook : repo t0m-car/infra.
+
+networks:
+  footics-net:
+    external: true
+
+services:
+  mcp:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    image: footics-mcp:local
+    restart: unless-stopped
+    networks: [footics-net]
+    environment:
+      HTTP_ADDR: ":8080"
+      FOOTICS_API_URL: http://api:8099
+      AUTH_JWKS_URL: http://gotrue:9999/.well-known/jwks.json
+      AUTH_JWT_AUD: authenticated
+      MCP_PUBLIC_URL: https://mcp.footics.app
+      MCP_OAUTH_ISSUER: https://api.footics.app/auth/v1
+      MCP_ENABLE_WRITES: "true"
